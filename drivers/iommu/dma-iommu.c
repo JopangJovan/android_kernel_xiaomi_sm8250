@@ -31,6 +31,7 @@
 #include <linux/pci.h>
 #include <linux/scatterlist.h>
 #include <linux/vmalloc.h>
+#include <trace/hooks/iommu.h>
 
 #define IOMMU_MAPPING_ERROR	0
 
@@ -517,11 +518,13 @@ static struct page **__iommu_dma_alloc_pages(unsigned int count,
 		for (order_mask &= (2U << __fls(count)) - 1;
 		     order_mask; order_mask &= ~order_size) {
 			unsigned int order = __fls(order_mask);
+			gfp_t alloc_flags = order ?
+					   (gfp | __GFP_NORETRY) &
+						~__GFP_RECLAIM : gfp;
 
 			order_size = 1U << order;
-			page = alloc_pages(order ?
-					   (gfp | __GFP_NORETRY) &
-						~__GFP_RECLAIM : gfp, order);
+			trace_android_vh_adjust_alloc_flags(order, &alloc_flags);
+			page = alloc_pages(alloc_flags, order);
 			if (!page)
 				continue;
 			if (!order)

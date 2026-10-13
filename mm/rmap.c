@@ -60,6 +60,7 @@
 #include <linux/memcontrol.h>
 #include <linux/mmu_notifier.h>
 #include <linux/migrate.h>
+#include <trace/hooks/mm.h>
 #include <linux/hugetlb.h>
 #include <linux/backing-dev.h>
 #include <linux/page_idle.h>
@@ -1111,7 +1112,12 @@ void do_page_add_anon_rmap(struct page *page,
 		mapcount = compound_mapcount_ptr(page);
 		first = atomic_inc_and_test(mapcount);
 	} else {
-		first = atomic_inc_and_test(&page->_mapcount);
+		bool success = false;
+
+		trace_android_vh_update_page_mapcount(page, true, compound,
+							&first, &success);
+		if (!success)
+			first = atomic_inc_and_test(&page->_mapcount);
 	}
 
 	if (first) {
@@ -1195,6 +1201,8 @@ void page_add_file_rmap(struct page *page, bool compound)
 		VM_BUG_ON_PAGE(!PageSwapBacked(page), page);
 		__inc_node_page_state(page, NR_SHMEM_PMDMAPPED);
 	} else {
+		bool first, success = false;
+
 		if (PageTransCompound(page) && page_mapping(page)) {
 			VM_WARN_ON_ONCE(!PageLocked(page));
 
@@ -1202,7 +1210,11 @@ void page_add_file_rmap(struct page *page, bool compound)
 			if (PageMlocked(page))
 				clear_page_mlock(compound_head(page));
 		}
-		if (!atomic_inc_and_test(&page->_mapcount))
+		trace_android_vh_update_page_mapcount(page, true, compound,
+							&first, &success);
+		if (!success)
+			first = atomic_inc_and_test(&page->_mapcount);
+		if (!first)
 			goto out;
 	}
 	__mod_lruvec_page_state(page, NR_FILE_MAPPED, nr);
@@ -1235,8 +1247,16 @@ static void page_remove_file_rmap(struct page *page, bool compound)
 		VM_BUG_ON_PAGE(!PageSwapBacked(page), page);
 		__dec_node_page_state(page, NR_SHMEM_PMDMAPPED);
 	} else {
-		if (!atomic_add_negative(-1, &page->_mapcount))
+		bool first, success = false;
+
+		trace_android_vh_update_page_mapcount(page, false, compound,
+							&first, &success);
+		if (success) {
+			if (!first)
+				goto out;
+		} else if (!atomic_add_negative(-1, &page->_mapcount)) {
 			goto out;
+		}
 	}
 
 	/*
@@ -1306,8 +1326,18 @@ void page_remove_rmap(struct page *page, bool compound)
 		return page_remove_anon_compound_rmap(page);
 
 	/* page still mapped by someone else? */
-	if (!atomic_add_negative(-1, &page->_mapcount))
-		return;
+	{
+		bool first, success = false;
+
+		trace_android_vh_update_page_mapcount(page, false, compound,
+							&first, &success);
+		if (success) {
+			if (!first)
+				return;
+		} else if (!atomic_add_negative(-1, &page->_mapcount)) {
+			return;
+		}
+	}
 
 	/*
 	 * We use the irq-unsafe __{inc|mod}_zone_page_stat because

@@ -31,6 +31,7 @@
 #include <linux/task_io_accounting.h>
 #include <linux/rseq.h>
 #include <linux/android_kabi.h>
+#include <linux/oplus_sched.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -1531,6 +1532,9 @@ struct task_struct {
 	ANDROID_KABI_RESERVE(7);
 #endif
 	ANDROID_KABI_RESERVE(8);
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	struct oplus_task_struct	oplus_task_info;
+#endif
 
 	/*
 	 * New fields for task_struct should be added above here, so that
@@ -1548,6 +1552,17 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
+
+static inline struct oplus_task_struct *get_oplus_task_struct(struct task_struct *t)
+{
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	if (!t)
+		return NULL;
+	return &t->oplus_task_info;
+#else
+	return NULL;
+#endif
+}
 
 static inline struct pid *task_pid(struct task_struct *task)
 {

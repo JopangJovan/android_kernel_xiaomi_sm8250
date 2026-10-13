@@ -24,6 +24,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/threads.h>
+#include <trace/hooks/midas_dev.h>
 
 #define UID_HASH_BITS 10
 
@@ -401,6 +402,7 @@ void cpufreq_acct_update_power(struct task_struct *p, u64 cputime)
 		return;
 
 	state = freqs->offset + READ_ONCE(freqs->last_index);
+	trace_android_vh_midas_record_task_times(cputime, p, state);
 
 	spin_lock_irqsave(&task_time_in_state_lock, flags);
 	if ((state < p->max_state || !cpufreq_task_times_realloc_locked(p)) &&

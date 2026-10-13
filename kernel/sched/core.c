@@ -27,6 +27,8 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/sched.h>
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
@@ -2751,6 +2753,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags,
 		goto out;
 
 	trace_sched_waking(p);
+	trace_android_rvh_try_to_wake_up(p);
 
 	/* We're going to change ->state: */
 	success = 1;
@@ -3185,6 +3188,7 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	plist_node_init(&p->pushable_tasks, MAX_PRIO);
 	RB_CLEAR_NODE(&p->pushable_dl_tasks);
 #endif
+	trace_android_rvh_sched_fork(p);
 	return 0;
 }
 
@@ -3242,6 +3246,7 @@ void wake_up_new_task(struct task_struct *p)
 
 	p->on_rq = TASK_ON_RQ_QUEUED;
 	trace_sched_wakeup_new(p);
+	trace_android_rvh_new_task_stats(p);
 	check_preempt_curr(rq, p, WF_FORK);
 #ifdef CONFIG_SMP
 	if (p->sched_class->task_woken) {
@@ -3527,6 +3532,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 		 * task and put them back on the free list.
 		 */
 		kprobe_flush_task(prev);
+		trace_android_rvh_flush_task(prev);
 
 		/* Task is done with its stack. */
 		put_task_stack(prev);

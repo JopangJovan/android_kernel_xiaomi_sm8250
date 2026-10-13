@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2018-2025 Oplus. All rights reserved.
+#
+# oplus mm performance features ported to this kernel (built-in).
+
+config OPLUS_FEATURE_KSWAPD_OPT
+	bool "enable oplus kswapd opt feature"
+	default n
+	help
+	  This feature enable some kswapd opt feature. include
+	  alloc callsite adjust flags to exclude kswapd_reclaim where fallback to low order alloc possible.
+	  collect alloc slowpath wakeup kswapd stat by order layout.
+	  collect kswapd pgdat_balance workload stat by order layout.
+
+config COSTLY_ALLOC_MASK_RECLAIM
+	bool "costly alloc mask reclaim"
+	depends on OPLUS_FEATURE_KSWAPD_OPT
+	default n
+	help
+	  define this config to mask reclaim for costly allocation
+
+config OPLUS_EXTRA_FREE_KBYTES
+	bool "oplus extra free kbytes"
+	default n
+	help
+	  define this config to add oplus extra free kbytes
+
+config OPLUS_FEATURE_ZRAM_OPT
+	bool "zram optimization"
+	default n
+	help
+	  define this config to add oplus zram optimization feature
+
+config OPLUS_OOM_REAPER_OPT
+	bool "oom reaper optimization"
+	depends on OPLUS_FEATURE_ZRAM_OPT
+	default n
+	help
+	  define this config to add oplus oom reaper optimization feature
+
+config MAPPED_PROTECT
+	bool "mapped_protect"
+	default n
+	help
+	  mapped_protect
+
+config MAPPED_PROTECT_ALL
+	bool "mapped_protect shrink_inactive_lru"
+	depends on MAPPED_PROTECT
+	default n
+	help
+	  mapped_protect_all
+
+config DYNAMIC_TUNING_SWAPPINESS
+	bool "tuning swappiness depends on file_pages size"
+	depends on OPLUS_FEATURE_ZRAM_OPT
+	default y
+	help
+	  Tuning swappiness depends on file_pages size.
+	  If the file pages too much, kswapd will reclaim more file pages,
+	  and support two levels.
+	  Say N if you not sure.
+
+config OPLUS_BALANCE_ANON_FILE_RECLAIM
+	bool "During reclaim treat anon and file backed pages equally"
+	depends on SWAP
+	help
+	  When performing memory reclaim treat anonymous and file backed pages
+	  equally.
+	  Swapping anonymous pages out to memory can be efficient enough to justify
+	  treating anonymous and file backed pages equally.
+
+config PROACTIVE_COMPACT
+	bool "trigger memory compact based on fragmentation index"
+	default n
+	help
+	  trigger memory compact based on fragmentation index
+
+config OPLUS_FEATURE_SIGKILL_DIAGNOSIS
+	bool "sigkill diagnosis driver"
+	default n
+	help
+	  assist sigkill diagnosis. record kill reason category for athena
+
+config DUMP_TASKS_MEM
+	bool "dump all userspace process meminfo"
+	default n
+	help
+	  dump all userspace process meminfo
+
+config OPLUS_SMART_STORAGE
+	bool "smart storage for performance"
+	depends on MAPPED_PROTECT
+	default n
+	help
+	  smart storage 1.0 add for performance

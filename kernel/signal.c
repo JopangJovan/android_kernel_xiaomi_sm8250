@@ -1407,6 +1407,13 @@ int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p,
 				add_to_oom_reaper(p);
 			ulmk_update_last_kill();
 		}
+		if (!ret && sig == SIGKILL) {
+			bool reap = false;
+
+			trace_android_vh_killed_process(current, p, &reap);
+			if (reap)
+				add_to_oom_reaper(p);
+		}
 	}
 
 	return ret;

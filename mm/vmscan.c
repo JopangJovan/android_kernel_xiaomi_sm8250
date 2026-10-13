@@ -69,6 +69,9 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/vmscan.h>
+#include <trace/hooks/mm.h>
 
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
@@ -1066,6 +1069,11 @@ static enum page_references page_check_references(struct page *page,
 {
 	int referenced_ptes, referenced_page;
 	unsigned long vm_flags;
+	bool should_protect = false;
+
+	trace_android_vh_page_should_be_protected(page, &should_protect);
+	if (unlikely(should_protect))
+		return PAGEREF_ACTIVATE;
 
 	referenced_ptes = page_referenced(page, 1, sc->target_mem_cgroup,
 					  &vm_flags);
@@ -1792,6 +1800,7 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 			nr_taken += nr_pages;
 			nr_zone_taken[page_zonenum(page)] += nr_pages;
 			list_move(&page->lru, dst);
+			trace_android_vh_del_page_from_lrulist(page, false, lru);
 			break;
 
 		case -EBUSY:
@@ -2206,6 +2215,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	spin_unlock_irq(&pgdat->lru_lock);
 
 	while (!list_empty(&l_hold)) {
+		bool should_protect = false;
+		bool bypass = false;
+
 		cond_resched();
 		page = lru_to_page(&l_hold);
 		list_del(&page->lru);
@@ -2223,7 +2235,16 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			}
 		}
 
-		if (page_referenced(page, 0, sc->target_mem_cgroup,
+		trace_android_vh_page_should_be_protected(page, &should_protect);
+		if (unlikely(should_protect)) {
+			nr_rotated += hpage_nr_pages(page);
+			list_add(&page->lru, &l_active);
+			continue;
+		}
+
+		trace_android_vh_page_referenced_check_bypass(page, nr_to_scan,
+							     lru, &bypass);
+		if (!bypass && page_referenced(page, 0, sc->target_mem_cgroup,
 				    &vm_flags)) {
 			nr_rotated += hpage_nr_pages(page);
 			/*
@@ -2433,6 +2454,7 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	unsigned long anon, file;
 	unsigned long ap, fp;
 	enum lru_list lru;
+	bool balance_anon_file_reclaim = false;
 
 	prepare_workingset_protection(pgdat, sc);
 
@@ -2441,6 +2463,8 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
+
+	trace_android_vh_tune_swappiness(&swappiness);
 
 #ifdef CONFIG_RTMM
 	if (unlikely(rtmm_reclaim(current->comm)))
@@ -2529,6 +2553,12 @@ static void get_scan_count(struct lruvec *lruvec, struct mem_cgroup *memcg,
 	 * lruvec even if it has plenty of old anonymous pages unless the
 	 * system is under heavy pressure.
 	 */
+	trace_android_rvh_set_balance_anon_file_reclaim(&balance_anon_file_reclaim);
+	if (balance_anon_file_reclaim) {
+		scan_balance = SCAN_EQUAL;
+		goto out;
+	}
+
 	if (!IS_ENABLED(CONFIG_BALANCE_ANON_FILE_RECLAIM) &&
 	    !inactive_list_is_low(lruvec, true, sc, false) &&
 	    lruvec_lru_size(lruvec, LRU_INACTIVE_FILE, sc->reclaim_idx) >> sc->priority &&
@@ -4116,6 +4146,8 @@ kswapd_try_sleep:
 		trace_mm_vmscan_kswapd_wake(pgdat->node_id, classzone_idx,
 						alloc_order);
 		reclaim_order = balance_pgdat(pgdat, alloc_order, classzone_idx);
+		trace_android_vh_vmscan_kswapd_done(pgdat->node_id, classzone_idx,
+						alloc_order, reclaim_order);
 		if (reclaim_order < alloc_order)
 			goto kswapd_try_sleep;
 	}

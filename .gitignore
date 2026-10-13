@@ -135,5 +135,17 @@ all.config
 # fetched Android config fragments
 kernel/configs/android-*.cfg
 
+out/
 out_miui/
 out_aosp/
+
+# regenerable build helpers (fetched by build_kernel.sh on every build)
+KernelSU/
+Baseband-guard/
+anykernel/
+drivers/kernelsu
+security/baseband-guard
+
+# packaged flashable zips
+/APTKernel_*.zip
+/OplusHans.zip

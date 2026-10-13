@@ -8,10 +8,12 @@ set -e
 # ==========================================
 if [ -z "$1" ]; then
     echo "[!] Error: No device specified."
-    echo "Usage: $0 <device_name> [ksu] [miui|aosp]"
+    echo "Usage: $0 <device_name> [ksu] [oc|non-oc] [miui|aosp]"
     echo "Example: $0 lmi"
     echo "         $0 lmi ksu"
     echo "         $0 lmi ksu miui"
+    echo "         $0 lmi ksu oc miui"
+    echo "         $0 lmi ksu non-oc miui"
     echo "         $0 lmi aosp"
     exit 1
 fi
@@ -27,6 +29,7 @@ if [ ! -f "$DEFCONFIG_PATH" ]; then
 fi
 
 ENABLE_KSU=0
+ENABLE_OC=0
 TARGET_OS="both"
 
 shift
@@ -34,10 +37,16 @@ shift
 for arg in "$@"; do
     case "$arg" in
         ksu) ENABLE_KSU=1 ;;
+        oc) ENABLE_OC=1 ;;
+        non-oc) ENABLE_OC=0 ;;
         miui) TARGET_OS="miui" ;;
         aosp) TARGET_OS="aosp" ;;
     esac
 done
+
+if [ "$ENABLE_OC" -eq 1 ]; then
+    echo "[*] GPU OC build: adds 845 MHz (TURBO) and 940 MHz (TURBO_L0) levels (kona-v2 speed-bin 0)"
+fi
 
 # ==========================================
 # Configuration & Environment
@@ -61,6 +70,8 @@ fi
 export USE_CCACHE=1
 export CROSS_COMPILE="aarch64-linux-gnu-"
 export CROSS_COMPILE_ARM32="arm-linux-gnueabi-"
+export LD_LIBRARY_PATH="$HOME/zyc-clang/compat${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LOCALVERSION=
 
 echo "[*] Checking Clang version..."
 clang --version || { echo "[!] Clang not found at ${TOOLCHAIN_BIN}. Please check the path."; exit 1; }
@@ -77,6 +88,7 @@ if [ "$ENABLE_KSU" -eq 1 ]; then
     echo "==========================================="
     echo "[*] Downloading and running ReSukiSU remote setup script..."
     curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+    (cd KernelSU && git checkout 5b76b884c75f729a220bb317aa4a4fc78f0e0e9c)
     echo "[+] KernelSU setup finished."
 fi
 
@@ -106,6 +118,8 @@ git clone https://github.com/AstideLabs/AnyKernel3 -b kona --single-branch --dep
 echo "[+] AnyKernel3 cloned successfully."
 echo "[*] Adjusting AnyKernel3..."
 sed -i "s/^device\.name1=.*/device.name1=${DEVICE_NAME}/" anykernel/anykernel.sh
+sed -i 's/^kernel\.string=.*/kernel.string=JopvanPortsKernel by Jopvan @ marblesurya/' anykernel/anykernel.sh
+sed -i 's/case "$userflavor" in/case "$userflavor" in\n    "") os="miui"; os_string="MIUI ROM (defaulted)";;/' anykernel/anykernel.sh
 echo "[*] AnyKernel3 adjusted successfully."
 echo "==========================================="
 
@@ -121,7 +135,7 @@ build_target() {
     local OUT_DIR="${KERNEL_DIR}/out_${OS_TYPE}"
     
     local MAKE_OPTS=(
-        -j"$(nproc)"
+        -j"$(nproc --all)"
         O="${OUT_DIR}"
         ARCH="${ARCH}"
         SUBARCH="${SUBARCH}"
@@ -140,9 +154,26 @@ build_target() {
     local DTS_SOURCE="arch/arm64/boot/dts/vendor/qcom"
     local DTS_BACKUP=".dts.bak.${OS_TYPE}"
 
+    # Recover any stale DTS backup left behind by a previous failed run.
+    # (Also prevents "cp -a source existing_backup_dir" from nesting copies
+    # inside the backup dir on the next run.)
+    for stale in .dts.bak.miui .dts.bak.aosp; do
+        if [ -d "$stale" ]; then
+            echo "[*] Recovering stale DTS backup: $stale"
+            rm -rf "${DTS_SOURCE}"
+            mv "$stale" "${DTS_SOURCE}"
+        fi
+    done
+
+    # Back up the DTS tree whenever this run will modify it
+    # (MIUI panel patches and/or the GPU OC dtsi swap).
+    if [ "$OS_TYPE" == "miui" ] || [ "$ENABLE_OC" -eq 1 ]; then
+        echo "[*] Backing up DTS tree -> ${DTS_BACKUP}"
+        cp -a "${DTS_SOURCE}" "${DTS_BACKUP}"
+    fi
+
     if [ "$OS_TYPE" == "miui" ]; then
         echo "[*] Applying MIUI DTS patches..."
-        cp -a "${DTS_SOURCE}" "${DTS_BACKUP}"
         
         # Apply MIUI specific sed patches to dts
         sed -i 's/<154>/<1537>/g' ${DTS_SOURCE}/dsi-panel-j1s* || true
@@ -193,6 +224,11 @@ build_target() {
         sed -i 's/\/\/39 01 00 00 11 00 03 51 03 FF/39 01 00 00 11 00 03 51 03 FF/g' ${DTS_SOURCE}/dsi-panel-j2-p2-1-38-0c-0a-dsc-cmd.dtsi || true
     fi
 
+    if [ "$ENABLE_OC" -eq 1 ]; then
+        echo "[*] Applying GPU OC DTS: kona-v2-gpu -> +845 MHz (TURBO) / +940 MHz (TURBO_L0), speed-bin 0"
+        cp "${DTS_SOURCE}/kona-v2-gpu-oc.dtsi" "${DTS_SOURCE}/kona-v2-gpu.dtsi"
+    fi
+
     echo "[*] Making defconfig: ${DEFCONFIG}..."
     make "${MAKE_OPTS[@]}" "${DEFCONFIG}"
 
@@ -202,7 +238,19 @@ build_target() {
     
     # 1. Baseband-guard configuration (Always applied)
     echo "[*] Injecting Baseband-guard configuration..."
-    scripts/config --file "${OUT_DIR}/.config" -e BBG
+    scripts/config --file "${OUT_DIR}/.config" -e BBG \
+        --set-str LOCALVERSION "-JopvanPorts-Xiaomi10" \
+        -d LOCALVERSION_AUTO \
+        -e OPLUS_FEATURE_HANS \
+        -e OPLUS_FEATURE_FRAME_BOOST \
+        -e OPLUS_FEATURE_MULTI_FBG
+
+    # Overclocked builds get a distinct uname suffix
+    if [ "$ENABLE_OC" -eq 1 ]; then
+        echo "[*] Marking kernel release: -Overclocked"
+        scripts/config --file "${OUT_DIR}/.config" \
+            --set-str LOCALVERSION "-JopvanPorts-Xiaomi10-Overclocked"
+    fi
 
     # 2. KernelSU configurations
     if [ "$ENABLE_KSU" -eq 1 ]; then
@@ -269,8 +317,8 @@ build_target() {
     echo "[*] Building kernel..."
     make "${MAKE_OPTS[@]}" 
 
-    # Restore DTS backup for MIUI
-    if [ "$OS_TYPE" == "miui" ]; then
+    # Restore DTS backup (MIUI panel patches and GPU OC are build-time only)
+    if [ -d "${DTS_BACKUP}" ]; then
         echo "[*] Restoring DTS backups..."
         rm -rf "${DTS_SOURCE}"
         mv "${DTS_BACKUP}" "${DTS_SOURCE}"
@@ -300,7 +348,11 @@ build_target() {
         fi
         local GIT_COMMIT_ID=$(git rev-parse --short=8 HEAD 2>/dev/null || echo "unknown")
         local OS_UPPER=$(echo "$OS_TYPE" | tr '[:lower:]' '[:upper:]')
-        local ZIP_FILENAME="APTKernel_${OS_UPPER}_${DEVICE_NAME}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
+        local OC_ZIP_STR=""
+        if [ "$ENABLE_OC" -eq 1 ]; then
+            OC_ZIP_STR="Overclocked_"
+        fi
+        local ZIP_FILENAME="APTKernel_${OS_UPPER}_${OC_ZIP_STR}${DEVICE_NAME}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
         
         echo "[*] Zipping $ZIP_FILENAME ..."
         pushd anykernel > /dev/null

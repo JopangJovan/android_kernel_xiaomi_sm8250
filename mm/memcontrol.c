@@ -50,6 +50,7 @@
 #include <linux/rbtree.h>
 #include <linux/slab.h>
 #include <linux/swap.h>
+#include <trace/hooks/mm.h>
 #include <linux/swapops.h>
 #include <linux/spinlock.h>
 #include <linux/eventfd.h>
@@ -6855,3 +6856,40 @@ static int __init mem_cgroup_swap_init(void)
 subsys_initcall(mem_cgroup_swap_init);
 
 #endif /* CONFIG_MEMCG_SWAP */
+
+/*
+ * oplus levelprotect helpers (ported from oplus kernel): lruvec traversal
+ * support for the mapped_protect driver.
+ */
+struct lruvec *page_to_lruvec(struct page *page, pg_data_t *pgdat)
+{
+	struct mem_cgroup *memcg = page_memcg(page);
+	struct lruvec *lruvec;
+
+	if (memcg && memcg != root_mem_cgroup)
+		lruvec = mem_cgroup_lruvec(pgdat, memcg);
+	else
+		lruvec = &pgdat->lruvec;
+
+	return lruvec;
+}
+EXPORT_SYMBOL_GPL(page_to_lruvec);
+
+void do_traversal_all_lruvec(void)
+{
+	pg_data_t *pgdat;
+
+	for_each_online_pgdat(pgdat) {
+		struct mem_cgroup *memcg = NULL;
+
+		memcg = mem_cgroup_iter(NULL, NULL, NULL);
+		do {
+			struct lruvec *lruvec = mem_cgroup_lruvec(pgdat, memcg);
+
+			trace_android_vh_do_traversal_lruvec(lruvec);
+
+			memcg = mem_cgroup_iter(NULL, memcg, NULL);
+		} while (memcg);
+	}
+}
+EXPORT_SYMBOL_GPL(do_traversal_all_lruvec);

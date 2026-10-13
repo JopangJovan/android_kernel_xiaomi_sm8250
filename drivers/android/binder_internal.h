@@ -657,6 +657,10 @@ struct binder_transaction {
 	 * during thread teardown
 	 */
 	spinlock_t lock;
+#if IS_ENABLED(CONFIG_OPLUS_BINDER_STRATEGY)
+	/* oplus binder strategy: used as vendor data slot (replaces GKI android_vendor_data1) */
+	unsigned long long android_vendor_data1;
+#endif
 };
 
 /**

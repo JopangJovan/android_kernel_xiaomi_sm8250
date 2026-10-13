@@ -913,6 +913,18 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #ifdef CONFIG_STACKPROTECTOR
 	tsk->stack_canary = get_random_canary();
 #endif
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_FRAME_BOOST)
+	tsk->oplus_task_info.task = tsk;
+	tsk->oplus_task_info.fbg_state = 0;
+	tsk->oplus_task_info.fbg_depth = -1;
+	tsk->oplus_task_info.fbg_running = false;
+	tsk->oplus_task_info.preferred_cluster_id = -1;
+	tsk->oplus_task_info.fbg_cur_group = 0;
+	tsk->oplus_task_info.last_wake_ts = 0;
+	tsk->oplus_task_info.im_flag = 0;
+	INIT_LIST_HEAD(&tsk->oplus_task_info.fbg_list);
+	raw_spin_lock_init(&tsk->oplus_task_info.fbg_list_entry_lock);
+#endif
 
 	/*
 	 * One for the user space visible state that goes away when reaped.
