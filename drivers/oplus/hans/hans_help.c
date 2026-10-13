@@ -77,7 +77,7 @@ void binder_preset_handler(void *data, struct hlist_head *hhead, struct mutex *l
 		binder_procs_lock = lock;
 }
 
-void binder_trans_handler(void *data, struct binder_proc *target_proc,
+void hans_binder_trans_handler(void *data, struct binder_proc *target_proc,
 				struct binder_proc *proc,
 				struct binder_thread *thread,
 				struct binder_transaction_data *tr)
@@ -164,7 +164,7 @@ void binder_trans_handler(void *data, struct binder_proc *target_proc,
 
 }
 
-void binder_reply_handler(void *data, struct binder_proc *target_proc,
+void hans_binder_reply_handler(void *data, struct binder_proc *target_proc,
 				struct binder_proc *proc,
 				struct binder_thread *thread,
 				struct binder_transaction_data *tr)

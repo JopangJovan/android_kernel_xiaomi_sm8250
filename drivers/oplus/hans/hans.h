@@ -145,8 +145,8 @@ void hans_check_async_binder_buffer(bool is_async, int free_async_space, int siz
 void hans_check_signal(struct task_struct *p, int sig);
 
 void binder_preset_handler(void *data, struct hlist_head *hhead, struct mutex *lock);
-void binder_trans_handler(void *data, struct binder_proc *target_proc, struct binder_proc *proc, struct binder_thread *thread, struct binder_transaction_data *tr);
-void binder_reply_handler(void *data, struct binder_proc *target_proc, struct binder_proc *proc, struct binder_thread *thread, struct binder_transaction_data *tr);
+void hans_binder_trans_handler(void *data, struct binder_proc *target_proc, struct binder_proc *proc, struct binder_thread *thread, struct binder_transaction_data *tr);
+void hans_binder_reply_handler(void *data, struct binder_proc *target_proc, struct binder_proc *proc, struct binder_thread *thread, struct binder_transaction_data *tr);
 void send_signal_handler(void *data, int sig, struct task_struct *killer, struct task_struct *dst);
 int register_hans_vendor_hooks(void);
 void unregister_hans_vendor_hooks(void);

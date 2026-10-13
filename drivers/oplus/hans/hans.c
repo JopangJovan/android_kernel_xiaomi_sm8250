@@ -259,13 +259,13 @@ int register_hans_vendor_hooks(void)
 		return rc;
 	}
 
-	rc = register_trace_android_vh_binder_trans(binder_trans_handler, NULL);
+	rc = register_trace_android_vh_binder_trans(hans_binder_trans_handler, NULL);
 	if (rc != 0) {
 		pr_err("register_trace_android_vh_binder_trans failed,  rc=%d\n", rc);
 		return rc;
 	}
 
-	rc = register_trace_android_vh_binder_reply(binder_reply_handler, NULL);
+	rc = register_trace_android_vh_binder_reply(hans_binder_reply_handler, NULL);
 	if (rc != 0) {
 		pr_err("register_trace_android_vh_binder_reply failed, rc=%d\n", rc);
 		return rc;
@@ -289,8 +289,8 @@ int register_hans_vendor_hooks(void)
 void unregister_hans_vendor_hooks(void)
 {
 	unregister_trace_android_vh_binder_preset(binder_preset_handler, NULL);
-	unregister_trace_android_vh_binder_trans(binder_trans_handler, NULL);
-	unregister_trace_android_vh_binder_reply(binder_reply_handler, NULL);
+	unregister_trace_android_vh_binder_trans(hans_binder_trans_handler, NULL);
+	unregister_trace_android_vh_binder_reply(hans_binder_reply_handler, NULL);
 	unregister_trace_android_vh_binder_alloc_new_buf_locked(binder_alloc_handler, NULL);
 	unregister_trace_android_vh_do_send_sig_info(send_signal_handler, NULL);
 }
