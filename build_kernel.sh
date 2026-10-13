@@ -46,6 +46,8 @@ done
 
 if [ "$ENABLE_OC" -eq 1 ]; then
     echo "[*] GPU OC build: adds 845 MHz (TURBO) and 940 MHz (TURBO_L0) levels (kona-v2 speed-bin 0)"
+    echo "[!] WARNING: The Overclocked kernel only works on the NORMAL Snapdragon 865 variant"
+    echo "[!]          (speed-bin 0, stock max GPU 587 MHz). Do NOT use it on 865+/865-/870."
 fi
 
 # ==========================================

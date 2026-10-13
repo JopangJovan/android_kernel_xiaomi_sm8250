@@ -8,13 +8,22 @@ on:
         required: true
         type: boolean
         default: true
+      variant:
+        description: 'GPU Variant (GPU 频率版本: oc = 超频版, 仅普通版骁龙 865 可用)'
+        required: true
+        type: choice
+        default: 'non-oc'
+        options:
+          - non-oc
+          - oc
+          - both
 
 permissions:
   contents: write
 
 jobs:
   build-matrix:
-    name: Build ${{ matrix.device }} | ${{ matrix.ksu && 'KSU' || 'NoKSU' }} (AOSP + MIUI)
+    name: Build ${{ matrix.device }} | ${{ matrix.ksu && 'KSU' || 'NoKSU' }} (AOSP + MIUI) | ${{ github.event.inputs.variant }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -71,6 +80,17 @@ jobs:
           wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz
           tar -zxvf Clang-16.0.6-20260807.tar.gz
 
+      - name: Warn if Overclocked (normal Snapdragon 865 only)
+        if: github.event.inputs.variant == 'oc' || github.event.inputs.variant == 'both'
+        run: |
+          echo "::warning title=Overclocked kernel::The Overclocked (OC) build ONLY works on the normal Snapdragon 865 variant (speed-bin 0, stock max GPU 587 MHz). Do NOT flash it on Snapdragon 865+/865-/870 devices."
+          {
+            echo "### ⚠️ Overclocked (OC) build"
+            echo ""
+            echo "This build is **only for the normal Snapdragon 865 variant** (speed-bin 0, stock max GPU 587 MHz)."
+            echo "Do not flash it on **Snapdragon 865+ / 865- / 870** devices."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run Build Script
         run: |
           chmod +x build_kernel.sh
@@ -80,8 +100,14 @@ jobs:
             ARGS="$ARGS ksu"
           fi
           
-          echo "Executing command: ./build_kernel.sh $ARGS"
-          ./build_kernel.sh $ARGS
+          VARIANTS="${{ github.event.inputs.variant }}"
+          if [ -z "$VARIANTS" ]; then VARIANTS="non-oc"; fi
+          if [ "$VARIANTS" = "both" ]; then VARIANTS="non-oc oc"; fi
+
+          for v in $VARIANTS; do
+            echo "Executing command: ./build_kernel.sh $ARGS $v"
+            ./build_kernel.sh $ARGS $v
+          done
 
       - name: Upload Kernel Artifacts
         uses: actions/upload-artifact@v4
@@ -115,22 +141,43 @@ jobs:
           pattern: APTKernel-*-${{ github.run_id }}
           merge-multiple: true
 
+      - name: Check for Overclocked zips
+        id: oc
+        run: |
+          if ls all_kernels/*Overclocked*.zip >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Generate Release Body
+        run: |
+          cat > release_body.md <<'RELBODY'
+          ## 自动构建内核发布 / Automated Kernel Release
+
+          - **构建日期 / Build Date:** ${{ steps.vars.outputs.BUILD_DATE }}
+          - **提交哈希 / Commit SHA:** `${{ steps.vars.outputs.SHA_SHORT }}`
+          - **支持设备 / Supported Devices:** `alioth, apollo, cas, cmi, dagu, elish, enuma, lmi, munch, pipa, psyche, thyme, umi`
+
+          ---
+          ### 刷机包分类指南 / Flashable ZIP Instructions:
+          - **MIUI**: 适用于原厂 MIUI / HyperOS 或基于 MIUI 修改的第三方 ROM。
+          - **AOSP**: 适用于 LineageOS 等类原生 AOSP ROM。
+          - **ReSukiSU-SuSFS**: 集成 ReSukiSU 与 SuSFS。
+          - **NoKernelSU**: 原版纯净内核，支持自行使用 Magisk 或 APatch 刷入。
+          RELBODY
+          if [ "${{ steps.oc.outputs.present }}" = "true" ]; then
+            {
+              echo ""
+              echo "> ⚠️ **Overclocked (OC) 仅限普通版骁龙 865 / Overclocked builds are ONLY for the normal Snapdragon 865 variant**"
+              echo "> (speed-bin 0, stock max GPU 587 MHz) - **do not flash on Snapdragon 865+ / 865- / 870**."
+            } >> release_body.md
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.vars.outputs.TAG_NAME }}
           name: "APTKernel Build - ${{ steps.vars.outputs.BUILD_DATE }} (${{ steps.vars.outputs.SHA_SHORT }})"
-          body: |
-            ## 自动构建内核发布 / Automated Kernel Release
-            
-            - **构建日期 / Build Date:** ${{ steps.vars.outputs.BUILD_DATE }}
-            - **提交哈希 / Commit SHA:** `${{ steps.vars.outputs.SHA_SHORT }}`
-            - **支持设备 / Supported Devices:** `alioth, apollo, cas, cmi, dagu, elish, enuma, lmi, munch, pipa, psyche, thyme, umi`
-            
-            ---
-            ### 刷机包分类指南 / Flashable ZIP Instructions:
-            - **MIUI**: 适用于原厂 MIUI / HyperOS 或基于 MIUI 修改的第三方 ROM。
-            - **AOSP**: 适用于 LineageOS 等类原生 AOSP ROM。
-            - **ReSukiSU-SuSFS**: 集成 ReSukiSU 与 SuSFS。
-            - **NoKernelSU**: 原版纯净内核，支持自行使用 Magisk 或 APatch 刷入。
+          body_path: release_body.md
           files: all_kernels/*.zip

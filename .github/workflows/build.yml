@@ -36,10 +36,18 @@ on:
           - aosp
           - miui
           - both
+      variant:
+        description: 'GPU Variant (GPU 频率版本: oc = 超频版, 仅普通版骁龙 865 可用)'
+        required: true
+        type: choice
+        default: 'non-oc'
+        options:
+          - non-oc
+          - oc
 
 jobs:
   build-kernel:
-    name: Build ${{ github.event.inputs.device }} | KSU:${{ github.event.inputs.ksu }} | OS:${{ github.event.inputs.target_os }}
+    name: Build ${{ github.event.inputs.device }} | KSU:${{ github.event.inputs.ksu }} | OS:${{ github.event.inputs.target_os }} | ${{ github.event.inputs.variant }}
     runs-on: ubuntu-latest
     
     steps:
@@ -73,6 +81,17 @@ jobs:
         wget -q https://github.com/ZyCromerZ/Clang/releases/download/16.0.6-20260807-release/Clang-16.0.6-20260807.tar.gz
         tar -zxvf Clang-16.0.6-20260807.tar.gz
 
+    - name: Warn if Overclocked (normal Snapdragon 865 only)
+      if: github.event.inputs.variant == 'oc'
+      run: |
+        echo "::warning title=Overclocked kernel::The Overclocked (OC) build ONLY works on the normal Snapdragon 865 variant (speed-bin 0, stock max GPU 587 MHz). Do NOT flash it on Snapdragon 865+/865-/870 devices."
+        {
+          echo "### ⚠️ Overclocked (OC) build"
+          echo ""
+          echo "This zip is **only for the normal Snapdragon 865 variant** (speed-bin 0, stock max GPU 587 MHz)."
+          echo "Do not flash it on **Snapdragon 865+ / 865- / 870** devices."
+        } >> "$GITHUB_STEP_SUMMARY"
+
     - name: Run Build Script
       run: |
         chmod +x build_kernel.sh
@@ -86,6 +105,10 @@ jobs:
         if [ "${{ github.event.inputs.target_os }}" != "both" ]; then
           ARGS="$ARGS ${{ github.event.inputs.target_os }}"
         fi
+
+        if [ -n "${{ github.event.inputs.variant }}" ]; then
+          ARGS="$ARGS ${{ github.event.inputs.variant }}"
+        fi
         
         echo "Executing command: ./build_kernel.sh $ARGS"
         ./build_kernel.sh $ARGS
@@ -93,6 +116,6 @@ jobs:
     - name: Upload Flashable ZIP
       uses: actions/upload-artifact@v7
       with:
-        name: APTKernel-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}-${{ github.run_id }}
+        name: APTKernel-${{ github.event.inputs.device }}-${{ github.event.inputs.target_os }}-${{ github.event.inputs.variant }}-${{ github.run_id }}
         path: APTKernel_*.zip
         compression-level: 0 # 已经被 zip 压缩过，无需再二次压缩
