@@ -354,7 +354,7 @@ build_target() {
         if [ "$ENABLE_OC" -eq 1 ]; then
             OC_ZIP_STR="Overclocked_"
         fi
-        local ZIP_FILENAME="APTKernel_${OS_UPPER}_${OC_ZIP_STR}${DEVICE_NAME}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
+        local ZIP_FILENAME="JopvanPorts-Kernel_${OS_UPPER}_${OC_ZIP_STR}${DEVICE_NAME}_${KSU_ZIP_STR}_$(date +'%Y%m%d_%H%M%S')_anykernel3_${GIT_COMMIT_ID}.zip"
         
         echo "[*] Zipping $ZIP_FILENAME ..."
         pushd anykernel > /dev/null
